@@ -265,6 +265,92 @@ cargo run
 
 ---
 
+## Phase 3: 活動監控
+
+### 1. 實作 src/activity.rs
+
+```rust
+use crate::state::SharedState;
+use rdev::{listen, Event, EventType};
+use std::time::Instant;
+use tracing::{error, info};
+
+pub fn start_monitoring(state: SharedState) {
+    std::thread::spawn(move || {
+        info!("Starting activity monitoring");
+        
+        let callback = move |event: Event| {
+            match event.event_type {
+                EventType::KeyPress(_) |
+                EventType::MouseMove { .. } |
+                EventType::ButtonPress(_) => {
+                    if let Ok(mut state) = state.lock() {
+                        state.last_activity = Instant::now();
+                    }
+                }
+                _ => {}
+            }
+        };
+
+        if let Err(e) = listen(callback) {
+            error!("Error in activity monitoring: {:?}", e);
+        }
+    });
+}
+```
+
+### 2. 更新 src/main.rs
+
+```rust
+mod error;
+mod state;
+mod config;
+mod activity;
+
+use error::Result;
+use tracing::info;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::INFO.into())
+        )
+        .init();
+
+    info!("Starting RMM 2");
+    
+    let config = config::Config::load()?;
+    let state = Arc::new(Mutex::new(state::AppState::new()));
+    
+    info!("Configuration loaded");
+    info!("State initialized");
+    
+    // Start activity monitoring
+    activity::start_monitoring(Arc::clone(&state));
+    info!("Activity monitoring started");
+    
+    // Keep the application running
+    loop {
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+```
+
+### 3. 驗證
+
+```bash
+cargo build
+cargo run
+```
+
+執行後，移動滑鼠或按鍵盤，應該會看到活動被監控（state.last_activity 會更新）。
+
+---
+
 ## 完成檢查
 
 ### Phase 1
@@ -278,6 +364,12 @@ cargo run
 - [ ] config.rs 實作完成
 - [ ] main.rs 更新完成
 - [ ] 程式可以編譯執行
+
+### Phase 3
+- [ ] activity.rs 實作完成
+- [ ] main.rs 整合活動監控
+- [ ] 程式可以監控鍵盤滑鼠活動
+- [ ] 背景執行緒正常運作
 
 ---
 

@@ -1,10 +1,13 @@
 mod error;
 mod state;
 mod config;
+mod activity;
 
 use error::Result;
 use tracing::info;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
@@ -22,5 +25,12 @@ fn main() -> Result<()> {
     info!("Configuration loaded");
     info!("State initialized");
     
-    Ok(())
+    // Start activity monitoring
+    activity::start_monitoring(Arc::clone(&state));
+    info!("Activity monitoring started");
+    
+    // Keep the application running
+    loop {
+        thread::sleep(Duration::from_secs(1));
+    }
 }
