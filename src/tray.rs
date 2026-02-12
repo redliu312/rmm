@@ -1,11 +1,20 @@
 use crate::error::{Result, RmmError};
-use crate::icon_data::{ICON_DATA, ICON_WIDTH, ICON_HEIGHT};
 use tray_item::{IconSource, TrayItem};
 use tracing::info;
 
 pub fn create_tray() -> () {
-    // Create tray icon using binary icon data
-    let mut tray = TrayItem::new("Tray Example", IconSource::Resource("")).unwrap();
+    // Load PNG data directly (macOS NSImage can handle PNG format)
+    let png_data = include_bytes!("../resources/mouse.png").to_vec();
+
+    // Create icon source with PNG data
+    let icon = IconSource::Data {
+        data: png_data,
+        height: 16,
+        width: 16,
+    };
+
+    // Create tray icon using PNG data
+    let mut tray = TrayItem::new("Tray Example", icon).unwrap();
 
     tray.add_label("Tray Label").unwrap();
 
