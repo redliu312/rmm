@@ -1,0 +1,121 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: rmm
+            asset_name: rmm-linux-x86_64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: rmm
+            asset_name: rmm-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: rmm
+            asset_name: rmm-macos-aarch64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: rmm.exe
+            asset_name: rmm-windows-x86_64.exe
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libx11-dev libxtst-dev libevdev-dev libdbus-1-dev pkg-config
+
+    - name: Build
+      run: cargo build --release --target ${{ matrix.target }}
+
+    - name: Strip binary (Linux and macOS)
+      if: runner.os != 'Windows'
+      run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}
+        path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Create release archives
+      run: |
+        cd artifacts
+        for dir in */; do
+          dirname="${dir%/}"
+          if [[ "$dirname" == *"windows"* ]]; then
+            cd "$dirname"
+            zip "../${dirname}.zip" *
+            cd ..
+          else
+            cd "$dirname"
+            tar czf "../${dirname}.tar.gz" *
+            cd ..
+          fi
+        done
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          artifacts/*.tar.gz
+          artifacts/*.zip
+        body: |
+          ## Release ${{ github.ref_name }}
+          
+          ### Downloads
+          
+          - **Linux (x86_64)**: `rmm-linux-x86_64.tar.gz`
+          - **macOS (Intel)**: `rmm-macos-x86_64.tar.gz`
+          - **macOS (Apple Silicon)**: `rmm-macos-aarch64.tar.gz`
+          - **Windows (x86_64)**: `rmm-windows-x86_64.exe.zip`
+          
+          ### Installation
+          
+          1. Download the appropriate file for your platform
+          2. Extract the archive (Linux/macOS) or unzip (Windows)
+          3. Run the executable
+          
+          ### Changes
+          
+          See [CHANGELOG.md](CHANGELOG.md) for details.
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,7 @@
 use tray_item::{IconSource, TrayItem};
 use tracing::info;
 use std::process;
+use native_dialog::{MessageDialog, MessageType};
 
 pub fn create_tray() -> () {
     // Load PNG data directly (macOS NSImage can handle PNG format)
@@ -16,13 +17,13 @@ pub fn create_tray() -> () {
     // Create tray icon using PNG data
     let mut tray = TrayItem::new("RMM - Rust Mouse Monitor", icon).unwrap();
 
-    // Add About menu item
+    // Add About menu item with native dialog
     tray.add_menu_item("About", || {
-        println!("=================================");
-        println!("RMM - Rust Mouse Monitor");
-        println!("Author: Red");
-        println!("Created with LLM help for learning Rust concepts");
-        println!("=================================");
+        let _ = MessageDialog::new()
+            .set_type(MessageType::Info)
+            .set_title("About RMM")
+            .set_text("RMM - Rust Mouse Monitor\n\nAuthor: Red\n\nCreated with LLM help for learning Rust concepts")
+            .show_alert();
     }).unwrap();
 
     tray.add_label("---").unwrap();
