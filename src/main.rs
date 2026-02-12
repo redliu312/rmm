@@ -3,6 +3,8 @@ mod state;
 mod config;
 mod activity;
 mod mouse;
+mod tray;
+mod icon_data;
 
 use error::Result;
 use tracing::info;
@@ -54,7 +56,11 @@ fn main() -> Result<()> {
     });
     info!("Heartbeat started ({}s interval)", heartbeat_interval);
     
-    // Keep the main thread alive while background monitoring runs
+    // Create system tray icon (must be on main thread for macOS)
+    // This will block the main thread and keep the tray alive
+    let _tray = tray::create_tray();
+    
+    // Keep the main thread alive to maintain the tray icon
     loop {
         thread::sleep(Duration::from_secs(1));
     }
