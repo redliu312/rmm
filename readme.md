@@ -138,6 +138,25 @@ cargo clippy
 cargo check
 ```
 
+### Pre-commit Hooks
+
+Install Git hooks to automatically format code before commits:
+
+```bash
+# Install the pre-commit hook
+bash .githooks/install.sh
+```
+
+The pre-commit hook will:
+- Automatically run `cargo fmt` before each commit
+- Prevent commits if code is not properly formatted
+- Ensure consistent code style across the project
+
+To bypass the hook (not recommended):
+```bash
+git commit --no-verify
+```
+
 ### Creating a Release
 
 To create a new release with pre-built binaries:
