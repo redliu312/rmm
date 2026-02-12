@@ -1,7 +1,7 @@
-use tray_item::{IconSource, TrayItem};
-use tracing::info;
-use std::process;
 use native_dialog::{MessageDialog, MessageType};
+use std::process;
+use tracing::info;
+use tray_item::{IconSource, TrayItem};
 
 pub fn create_tray() -> () {
     // Load PNG data directly (macOS NSImage can handle PNG format)
@@ -33,7 +33,8 @@ pub fn create_tray() -> () {
         info!("Stopping RMM application...");
         println!("RMM stopped by user");
         process::exit(0);
-    }).unwrap();
+    })
+    .unwrap();
 
     let inner = tray.inner_mut();
     inner.add_quit_item("Quit");
