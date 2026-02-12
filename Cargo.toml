@@ -6,7 +6,6 @@ edition = "2021"
 [dependencies]
 enigo = "0.2"
 rdev = "0.5"
-tray-item = { version = "0.10", features = ["ksni"] }
 tokio = { version = "1.0", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
@@ -19,10 +18,12 @@ png = "0.17"
 native-dialog = "0.7"
 
 [target.'cfg(target_os = "macos")'.dependencies]
+tray-item = "0.10"
 core-foundation = "0.9"
 io-kit-sys = "0.4"
 
 [target.'cfg(target_os = "windows")'.dependencies]
+tray-item = "0.10"
 windows = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_System_Power",
@@ -30,6 +31,7 @@ windows = { version = "0.52", features = [
 ] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
+tray-item = { version = "0.10", features = ["ksni"] }
 dbus = "0.9"
 
 [profile.release]
