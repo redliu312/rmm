@@ -71,7 +71,28 @@ echo -e "${BLUE}Step 5: Copying binary...${NC}"
 cp "$BUILD_DIR/$BINARY_NAME" "$MACOS_DIR/$BINARY_NAME"
 chmod +x "$MACOS_DIR/$BINARY_NAME"
 
-echo -e "${BLUE}Step 6: Setting bundle attributes...${NC}"
+echo -e "${BLUE}Step 6: Code signing...${NC}"
+# Check for Developer ID certificate
+SIGNING_IDENTITY=$(security find-identity -v -p codesigning 2>/dev/null | grep "Developer ID Application" | head -n 1 | awk -F'"' '{print $2}')
+
+if [ -n "$SIGNING_IDENTITY" ]; then
+    echo "Found Developer ID: $SIGNING_IDENTITY"
+    codesign --force --deep \
+        --sign "$SIGNING_IDENTITY" \
+        --options runtime \
+        --timestamp \
+        "$APP_DIR" 2>/dev/null || {
+        echo "Developer ID signing failed, falling back to ad-hoc signing"
+        codesign --force --deep --sign - "$APP_DIR"
+    }
+    echo -e "${GREEN}✓ Signed with Developer ID${NC}"
+else
+    echo "No Developer ID found, using ad-hoc signing (local use only)"
+    codesign --force --deep --sign - "$APP_DIR"
+    echo -e "${GREEN}✓ Ad-hoc signed${NC}"
+fi
+
+echo -e "${BLUE}Step 7: Setting bundle attributes...${NC}"
 # Remove quarantine attribute if present
 xattr -cr "$APP_DIR" 2>/dev/null || true
 
@@ -82,3 +103,9 @@ echo "You can now:"
 echo "  1. Double-click $APP_NAME.app to run it"
 echo "  2. Drag it to /Applications folder"
 echo "  3. Create a DMG: hdiutil create -volname $APP_NAME -srcfolder \"$APP_DIR\" -ov -format UDZO \"$BUILD_DIR/$APP_NAME.dmg\""
+echo ""
+if [ -z "$SIGNING_IDENTITY" ]; then
+    echo "Note: App is ad-hoc signed (for local use only)."
+    echo "For distribution, you need an Apple Developer account and Developer ID certificate."
+    echo "See macos/CODE_SIGNING.md for details."
+fi

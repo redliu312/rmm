@@ -129,13 +129,121 @@ Default configuration:
 
 ```json
 {
-  "inactivity_threshold": 300,
-  "heartbeat_interval": 60
+  "inactivity_threshold": 10,
+  "heartbeat_interval": 10,
+  "worker_interval": 10,
+  "movement_delta": 10,
+  "max_errors": 10,
+  "auto_start": false
 }
 ```
 
-- `inactivity_threshold`: Seconds of inactivity before moving mouse (default: 300)
-- `heartbeat_interval`: Seconds between activity checks (default: 60)
+Configuration options:
+- `inactivity_threshold`: Seconds of inactivity before moving mouse (default: 10)
+- `heartbeat_interval`: Seconds between activity checks (default: 10)
+- `worker_interval`: Seconds between worker thread checks (default: 10)
+- `movement_delta`: Pixels to move the mouse (default: 10)
+- `max_errors`: Maximum errors before stopping (default: 10)
+- `auto_start`: Start monitoring automatically on launch (default: false)
+
+### macOS Permissions
+
+**Important:** On macOS, RMM requires **Accessibility permission** to monitor keyboard/mouse activity and move the cursor.
+
+1. Launch RMM.app
+2. Go to **System Settings → Privacy & Security → Accessibility**
+3. Add RMM.app and toggle it ON
+4. Restart RMM.app
+
+Without this permission, the app will run but won't detect inactivity or move the mouse.
+
+See [`macos/PERMISSIONS.md`](macos/PERMISSIONS.md) for detailed setup instructions.
+
+## Troubleshooting
+
+### macOS: App Runs But Mouse Doesn't Move
+
+**Symptom:** Menu bar icon appears, but mouse doesn't move after inactivity.
+
+**Solution:** Grant Accessibility permission (see Configuration → macOS Permissions above).
+
+**Verify the app is running:**
+```bash
+# Check if RMM process is running
+ps aux | grep -i rmm | grep -v grep
+
+# View recent app logs (macOS)
+log show --predicate 'process == "rmm"' --last 1m --style compact 2>/dev/null | tail -20
+```
+
+**Command explanation:**
+- `log show` - macOS unified logging system
+- `--predicate 'process == "rmm"'` - Filter logs for RMM process only
+- `--last 1m` - Show logs from the last 1 minute
+- `--style compact` - Compact output format
+- `2>/dev/null` - Suppress error messages
+- `| tail -20` - Show only the last 20 lines
+
+**Check for permission errors:**
+```bash
+# Look for permission-related errors
+log show --predicate 'process == "rmm"' --last 5m --style compact 2>/dev/null | grep -i "permission\|denied\|accessibility"
+```
+
+### macOS: "RMM.app is damaged"
+
+**Solution:**
+```bash
+# Remove quarantine attribute
+xattr -d com.apple.quarantine /path/to/RMM.app
+
+# Or right-click → Open (first time only)
+```
+
+### Configuration Not Working
+
+**Check config file location:**
+```bash
+# macOS
+cat ~/Library/Application\ Support/rmm/config.json
+
+# Linux
+cat ~/.config/rmm/config.json
+
+# Windows
+type %APPDATA%\rmm\config.json
+```
+
+**Create a test config with 5-second threshold:**
+```bash
+# macOS
+mkdir -p ~/Library/Application\ Support/rmm
+cat > ~/Library/Application\ Support/rmm/config.json << 'EOF'
+{
+  "inactivity_threshold": 5,
+  "heartbeat_interval": 1,
+  "worker_interval": 1,
+  "movement_delta": 10,
+  "max_errors": 10,
+  "auto_start": false
+}
+EOF
+
+# Linux
+mkdir -p ~/.config/rmm
+cat > ~/.config/rmm/config.json << 'EOF'
+{
+  "inactivity_threshold": 5,
+  "heartbeat_interval": 1,
+  "worker_interval": 1,
+  "movement_delta": 10,
+  "max_errors": 10,
+  "auto_start": false
+}
+EOF
+```
+
+Then restart the app - it should move the mouse after 5 seconds of inactivity.
 
 ## Testing
 
