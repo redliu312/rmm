@@ -54,11 +54,70 @@ jobs:
       if: runner.os != 'Windows'
       run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
 
-    - name: Upload artifact
+    - name: Build macOS .app bundle
+      if: runner.os == 'macOS'
+      run: |
+        # Create .app bundle structure
+        APP_NAME="RMM"
+        APP_DIR="target/${{ matrix.target }}/release/${APP_NAME}.app"
+        mkdir -p "${APP_DIR}/Contents/MacOS"
+        mkdir -p "${APP_DIR}/Contents/Resources"
+        
+        # Copy Info.plist
+        cp macos/Info.plist "${APP_DIR}/Contents/Info.plist"
+        
+        # Convert PNG to ICNS
+        ICONSET_DIR="target/${{ matrix.target }}/release/icon.iconset"
+        mkdir -p "${ICONSET_DIR}"
+        PNG_SOURCE="resources/mouse.png"
+        
+        sips -z 16 16     "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_16x16.png"
+        sips -z 32 32     "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_16x16@2x.png"
+        sips -z 32 32     "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_32x32.png"
+        sips -z 64 64     "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_32x32@2x.png"
+        sips -z 128 128   "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_128x128.png"
+        sips -z 256 256   "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_128x128@2x.png"
+        sips -z 256 256   "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_256x256.png"
+        sips -z 512 512   "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_256x256@2x.png"
+        sips -z 512 512   "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_512x512.png"
+        sips -z 1024 1024 "${PNG_SOURCE}" --out "${ICONSET_DIR}/icon_512x512@2x.png"
+        
+        iconutil -c icns "${ICONSET_DIR}" -o "${APP_DIR}/Contents/Resources/icon.icns"
+        rm -rf "${ICONSET_DIR}"
+        
+        # Copy binary
+        cp "target/${{ matrix.target }}/release/${{ matrix.artifact_name }}" "${APP_DIR}/Contents/MacOS/rmm"
+        chmod +x "${APP_DIR}/Contents/MacOS/rmm"
+        
+        # Remove quarantine attribute
+        xattr -cr "${APP_DIR}" || true
+        
+        # Create DMG
+        hdiutil create -volname "${APP_NAME}" \
+          -srcfolder "${APP_DIR}" \
+          -ov -format UDZO \
+          "target/${{ matrix.target }}/release/${APP_NAME}-${{ matrix.target }}.dmg"
+
+    - name: Upload binary artifact
+      if: runner.os != 'macOS'
       uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.asset_name }}
         path: target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+    - name: Upload macOS .app bundle
+      if: runner.os == 'macOS'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}-app
+        path: target/${{ matrix.target }}/release/RMM.app
+
+    - name: Upload macOS DMG
+      if: runner.os == 'macOS'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}-dmg
+        path: target/${{ matrix.target }}/release/RMM-${{ matrix.target }}.dmg
 
   release:
     name: Create Release
@@ -80,6 +139,11 @@ jobs:
         cd artifacts
         for dir in */; do
           dirname="${dir%/}"
+          # Skip DMG and app directories (already packaged)
+          if [[ "$dirname" == *"-dmg" ]] || [[ "$dirname" == *"-app" ]]; then
+            continue
+          fi
+          
           if [[ "$dirname" == *"windows"* ]]; then
             cd "$dirname"
             zip "../${dirname}.zip" *
@@ -97,21 +161,41 @@ jobs:
         files: |
           artifacts/*.tar.gz
           artifacts/*.zip
+          artifacts/*-dmg/*.dmg
         body: |
           ## Release ${{ github.ref_name }}
           
           ### Downloads
           
+          #### macOS
+          - **macOS (Intel) - .app Bundle**: `RMM-x86_64-apple-darwin.dmg` - Double-click to install
+          - **macOS (Apple Silicon) - .app Bundle**: `RMM-aarch64-apple-darwin.dmg` - Double-click to install
+          - **macOS (Intel) - Binary**: `rmm-macos-x86_64.tar.gz` - Command-line only
+          - **macOS (Apple Silicon) - Binary**: `rmm-macos-aarch64.tar.gz` - Command-line only
+          
+          #### Other Platforms
           - **Linux (x86_64)**: `rmm-linux-x86_64.tar.gz`
-          - **macOS (Intel)**: `rmm-macos-x86_64.tar.gz`
-          - **macOS (Apple Silicon)**: `rmm-macos-aarch64.tar.gz`
           - **Windows (x86_64)**: `rmm-windows-x86_64.exe.zip`
           
           ### Installation
           
-          1. Download the appropriate file for your platform
-          2. Extract the archive (Linux/macOS) or unzip (Windows)
-          3. Run the executable
+          #### macOS (.app Bundle - Recommended)
+          1. Download the `.dmg` file for your architecture
+          2. Open the DMG file
+          3. Drag RMM.app to your Applications folder
+          4. Double-click RMM.app to run (it will appear in the menu bar)
+          
+          #### macOS (Binary)
+          1. Download and extract the `.tar.gz` file
+          2. Run from Terminal: `./rmm`
+          
+          #### Linux
+          1. Download and extract the `.tar.gz` file
+          2. Run: `./rmm`
+          
+          #### Windows
+          1. Download and unzip the `.zip` file
+          2. Run `rmm.exe`
           
           ### Changes
           

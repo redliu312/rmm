@@ -34,12 +34,29 @@ This project is inspired by [automatic-mouse-mover](https://github.com/prashantg
 
 Download the latest release from the [Releases page](https://github.com/redliu312/rmm/releases).
 
-Available platforms:
-- Linux (x86_64)
-- macOS (Intel and Apple Silicon)
-- Windows (x86_64)
+#### macOS (.app Bundle - Recommended)
+
+For macOS users, download the `.dmg` file for your architecture:
+- **Intel Macs**: `RMM-x86_64-apple-darwin.dmg`
+- **Apple Silicon (M1/M2/M3)**: `RMM-aarch64-apple-darwin.dmg`
+
+Installation:
+1. Download and open the `.dmg` file
+2. Drag `RMM.app` to your Applications folder
+3. Double-click `RMM.app` to run
+4. The app will appear in your menu bar
+
+The .app bundle provides a native macOS experience with proper icon and menu bar integration.
+
+#### Other Platforms
+
+- **Linux (x86_64)**: `rmm-linux-x86_64.tar.gz`
+- **Windows (x86_64)**: `rmm-windows-x86_64.exe.zip`
+- **macOS (command-line binary)**: `rmm-macos-x86_64.tar.gz` or `rmm-macos-aarch64.tar.gz`
 
 ### Build from Source
+
+#### Standard Build
 
 ```bash
 # Clone the repository
@@ -52,12 +69,42 @@ cargo build --release
 # The binary will be in target/release/rmm (or rmm.exe on Windows)
 ```
 
-## Usage
-
-Simply run the application:
+#### Build macOS .app Bundle (macOS only)
 
 ```bash
+# Build the .app bundle
+make app
+
+# The app will be in target/release/RMM.app
+# You can double-click it or drag it to /Applications
+
+# Optional: Create a DMG installer
+make dmg
+
+# Optional: Install directly to /Applications
+make install
+```
+
+## Usage
+
+### macOS (.app Bundle)
+
+Simply double-click `RMM.app` from your Applications folder or Launchpad. The application will:
+1. Start monitoring your keyboard and mouse activity
+2. Display a menu bar icon (top-right of your screen)
+3. Automatically move the mouse when you've been inactive for the configured threshold
+
+### Command-line (All Platforms)
+
+Run the application from the terminal:
+
+```bash
+# If built from source
 cargo run --release
+
+# Or run the binary directly
+./rmm  # macOS/Linux
+rmm.exe  # Windows
 ```
 
 The application will:
@@ -119,11 +166,39 @@ rmm/
 │   ├── state.rs         # Application state
 │   ├── config.rs        # Configuration management
 │   └── error.rs         # Error types
+├── macos/               # macOS .app bundle files
+│   ├── Info.plist       # Bundle metadata
+│   └── build-app.sh     # Build script for .app
 ├── resources/           # Application resources
 │   └── mouse.png        # Tray icon
 ├── tests/              # Integration tests
+├── Makefile            # Build automation
 └── doc/                # Documentation
 ```
+
+### Building macOS .app Bundle
+
+The project includes scripts to build a native macOS .app bundle:
+
+```bash
+# Build the .app bundle (creates target/release/RMM.app)
+make app
+
+# Create a DMG installer (creates target/release/RMM.dmg)
+make dmg
+
+# Install to /Applications
+make install
+```
+
+The build process:
+1. Compiles the release binary
+2. Creates the `.app` directory structure
+3. Converts the PNG icon to `.icns` format
+4. Packages everything into a proper macOS application bundle
+5. Optionally creates a DMG installer
+
+The resulting `.app` bundle can be double-clicked like any native macOS application.
 
 ### Code Quality
 
