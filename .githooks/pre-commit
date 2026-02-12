@@ -1,0 +1,20 @@
+#!/bin/sh
+#
+# Pre-commit hook to format Rust code with rustfmt
+#
+
+echo "Running rustfmt..."
+
+# Format all Rust files
+cargo fmt --all
+
+# Check if there are any changes after formatting
+if ! git diff --quiet; then
+    echo "Code has been formatted. Please review the changes and commit again."
+    echo "Staged changes have been formatted but not added to the commit."
+    echo "Run 'git add .' to stage the formatted changes."
+    exit 1
+fi
+
+echo "Code formatting check passed!"
+exit 0
