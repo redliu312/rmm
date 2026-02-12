@@ -17,9 +17,9 @@ pub struct Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
-            heartbeat_interval: 60,
+            heartbeat_interval: 10,
             worker_interval: 10,
-            inactivity_threshold: 60,
+            inactivity_threshold: 10,
             movement_delta: 10,
             max_errors: 10,
             auto_start: false,

@@ -351,6 +351,338 @@ cargo run
 
 ---
 
+## Phase 4: 滑鼠移動控制器
+
+### 1. 實作 src/mouse.rs
+
+```rust
+use crate::error::{Result, RmmError};
+use crate::state::SharedState;
+use enigo::{Enigo, Mouse, Settings};
+use std::time::Instant;
+use tracing::{error, info, warn};
+
+pub struct MouseController {
+    enigo: Enigo,
+}
+
+impl MouseController {
+    pub fn new() -> Result<Self> {
+        let enigo = Enigo::new(&Settings::default())
+            .map_err(|e| RmmError::MouseControl(format!("Failed to initialize Enigo: {:?}", e)))?;
+        Ok(Self { enigo })
+    }
+
+    pub fn get_position(&mut self) -> Result<(i32, i32)> {
+        self.enigo
+            .location()
+            .map_err(|e| RmmError::MouseControl(format!("Failed to get mouse position: {:?}", e)))
+    }
+
+    pub fn move_mouse(&mut self, x: i32, y: i32) -> Result<()> {
+        self.enigo
+            .move_mouse(x, y, enigo::Coordinate::Abs)
+            .map_err(|e| RmmError::MouseControl(format!("Failed to move mouse: {:?}", e)))
+    }
+
+    pub fn verify_position(&mut self, expected_x: i32, expected_y: i32) -> Result<bool> {
+        let (actual_x, actual_y) = self.get_position()?;
+        let tolerance = 5; // Allow 5 pixel tolerance
+        let x_match = (actual_x - expected_x).abs() <= tolerance;
+        let y_match = (actual_y - expected_y).abs() <= tolerance;
+        Ok(x_match && y_match)
+    }
+}
+
+pub fn check_and_move(state: SharedState, inactivity_threshold: u64) -> Result<()> {
+    let mut controller = MouseController::new()?;
+    
+    let (should_move, direction) = {
+        let state_guard = state.lock().map_err(|e| {
+            RmmError::MouseControl(format!("Failed to lock state: {}", e))
+        })?;
+        
+        if !state_guard.is_running {
+            return Ok(());
+        }
+        
+        let inactive_duration = state_guard.last_activity.elapsed().as_secs();
+        let should_move = inactive_duration >= inactivity_threshold;
+        
+        (should_move, state_guard.move_direction)
+    };
+    
+    if !should_move {
+        return Ok(());
+    }
+    
+    // Get current position
+    let (current_x, current_y) = controller.get_position()?;
+    info!("Current mouse position: ({}, {})", current_x, current_y);
+    
+    // Calculate new position
+    let delta = 10 * direction;
+    let new_x = current_x + delta;
+    let new_y = current_y + delta;
+    
+    info!("Moving mouse by {} pixels to ({}, {})", delta, new_x, new_y);
+    
+    // Move mouse
+    controller.move_mouse(new_x, new_y)?;
+    
+    // Verify movement
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let verified = controller.verify_position(new_x, new_y)?;
+    
+    let mut state_guard = state.lock().map_err(|e| {
+        RmmError::MouseControl(format!("Failed to lock state: {}", e))
+    })?;
+    
+    if verified {
+        info!("Mouse movement verified successfully");
+        state_guard.last_moved = Instant::now();
+        state_guard.move_direction *= -1; // Alternate direction
+        state_guard.error_count = 0;
+    } else {
+        state_guard.error_count += 1;
+        warn!("Mouse movement verification failed (error count: {})", state_guard.error_count);
+        
+        if state_guard.error_count >= 10 {
+            error!("Mouse movement failed 10 times! Please check system permissions.");
+        }
+    }
+    
+    Ok(())
+}
+```
+
+### 2. 更新 src/main.rs
+
+```rust
+mod error;
+mod state;
+mod config;
+mod activity;
+mod mouse;
+
+use error::Result;
+use tracing::info;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::INFO.into())
+        )
+        .init();
+
+    info!("Starting RMM 2");
+    
+    let config = config::Config::load()?;
+    let state = Arc::new(Mutex::new(state::AppState::new()));
+    
+    // Set running to true
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.is_running = true;
+    }
+    
+    info!("Configuration loaded");
+    info!("State initialized");
+    
+    // Start activity monitoring
+    activity::start_monitoring(Arc::clone(&state));
+    info!("Activity monitoring started");
+    
+    // Heartbeat loop - check every 60 seconds
+    let heartbeat_state = Arc::clone(&state);
+    let inactivity_threshold = config.inactivity_threshold;
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(60));
+            if let Err(e) = mouse::check_and_move(Arc::clone(&heartbeat_state), inactivity_threshold) {
+                tracing::error!("Error in heartbeat: {:?}", e);
+            }
+        }
+    });
+    info!("Heartbeat started (60s interval)");
+    
+    // Keep the application running
+    loop {
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+```
+
+### 3. 驗證
+
+```bash
+cargo build
+cargo run
+```
+
+執行後：
+1. 程式會每 60 秒檢查一次
+2. 如果 60 秒內沒有活動，會自動移動滑鼠 ±10 像素
+3. 移動方向會交替（+10, -10, +10, -10...）
+4. 移動後會驗證位置是否正確
+5. 如果失敗 10 次會顯示錯誤訊息
+
+---
+
+## Phase 5: System Tray Integration
+
+### 1. Create src/tray.rs
+
+Add a system tray icon with menu controls.
+
+```rust
+use crate::error::{Result, RmmError};
+use crate::state::SharedState;
+use tray_item::{IconSource, TrayItem};
+use std::sync::mpsc;
+use tracing::info;
+
+pub enum TrayMessage {
+    Toggle,
+    Quit,
+}
+
+pub fn create_tray(state: SharedState) -> Result<(TrayItem, mpsc::Receiver<TrayMessage>)> {
+    let mut tray = TrayItem::new("RMM", IconSource::Resource("icon-name"))
+        .map_err(|e| RmmError::SystemTray(format!("Failed to create tray: {:?}", e)))?;
+    
+    let (tx, rx) = mpsc::channel();
+    
+    // Start/Stop menu item
+    let tx_toggle = tx.clone();
+    tray.add_menu_item("Start/Stop", move || {
+        let _ = tx_toggle.send(TrayMessage::Toggle);
+    })
+    .map_err(|e| RmmError::SystemTray(format!("Failed to add menu item: {:?}", e)))?;
+    
+    // Quit menu item
+    let tx_quit = tx.clone();
+    tray.add_menu_item("Quit", move || {
+        let _ = tx_quit.send(TrayMessage::Quit);
+    })
+    .map_err(|e| RmmError::SystemTray(format!("Failed to add menu item: {:?}", e)))?;
+    
+    info!("System tray created");
+    Ok((tray, rx))
+}
+
+pub fn handle_tray_events(rx: mpsc::Receiver<TrayMessage>, state: SharedState) {
+    std::thread::spawn(move || {
+        while let Ok(msg) = rx.recv() {
+            match msg {
+                TrayMessage::Toggle => {
+                    if let Ok(mut state_guard) = state.lock() {
+                        state_guard.is_running = !state_guard.is_running;
+                        let status = if state_guard.is_running { "started" } else { "stopped" };
+                        info!("Mouse movement {}", status);
+                    }
+                }
+                TrayMessage::Quit => {
+                    info!("Quit requested");
+                    std::process::exit(0);
+                }
+            }
+        }
+    });
+}
+```
+
+### 2. Update src/main.rs
+
+Add tray module and integrate it.
+
+```rust
+mod error;
+mod state;
+mod config;
+mod activity;
+mod mouse;
+mod tray;
+
+use error::Result;
+use tracing::info;
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::from_default_env()
+                .add_directive(tracing::Level::INFO.into())
+        )
+        .init();
+
+    info!("Starting RMM 2");
+    
+    let config = config::Config::load()?;
+    let state = Arc::new(Mutex::new(state::AppState::new()));
+    
+    // Set running to true
+    {
+        let mut state_guard = state.lock().unwrap();
+        state_guard.is_running = true;
+    }
+    
+    info!("Configuration loaded");
+    info!("State initialized");
+    
+    // Create system tray
+    let (_tray, tray_rx) = tray::create_tray(Arc::clone(&state))?;
+    tray::handle_tray_events(tray_rx, Arc::clone(&state));
+    info!("System tray initialized");
+    
+    // Start activity monitoring
+    activity::start_monitoring(Arc::clone(&state));
+    info!("Activity monitoring started");
+    
+    // Heartbeat loop
+    let heartbeat_state = Arc::clone(&state);
+    let inactivity_threshold = config.inactivity_threshold;
+    let heartbeat_interval = config.heartbeat_interval;
+    thread::spawn(move || {
+        loop {
+            thread::sleep(Duration::from_secs(heartbeat_interval));
+            if let Err(e) = mouse::check_and_move(Arc::clone(&heartbeat_state), inactivity_threshold) {
+                tracing::error!("Error in heartbeat: {:?}", e);
+            }
+        }
+    });
+    info!("Heartbeat started ({}s interval)", heartbeat_interval);
+    
+    // Keep running
+    loop {
+        thread::sleep(Duration::from_secs(1));
+    }
+}
+```
+
+### 3. Test
+
+```bash
+cargo build
+cargo run
+```
+
+After running:
+1. You'll see a system tray icon
+2. Click it to see the menu
+3. Use "Start/Stop" to toggle mouse movement
+4. Use "Quit" to exit the app
+
+**Note**: On macOS, you may need to grant accessibility permissions for the tray to work properly.
+
+---
+
 ## 完成檢查
 
 ### Phase 1
@@ -370,6 +702,25 @@ cargo run
 - [ ] main.rs 整合活動監控
 - [ ] 程式可以監控鍵盤滑鼠活動
 - [ ] 背景執行緒正常運作
+
+### Phase 4
+- [ ] mouse.rs 實作完成
+- [ ] MouseController 結構體建立
+- [ ] check_and_move 函數實作
+- [ ] main.rs 整合 heartbeat 迴圈
+- [ ] 程式可以自動移動滑鼠
+- [ ] 移動驗證功能正常
+- [ ] 錯誤計數功能正常
+
+### Phase 5
+- [ ] tray.rs 實作完成
+- [ ] TrayMessage enum 建立
+- [ ] create_tray 函數實作
+- [ ] handle_tray_events 函數實作
+- [ ] main.rs 整合 system tray
+- [ ] 系統托盤圖示顯示
+- [ ] Start/Stop 功能正常
+- [ ] Quit 功能正常
 
 ---
 
