@@ -4,7 +4,6 @@ mod config;
 mod activity;
 mod mouse;
 mod tray;
-mod icon_data;
 
 use error::Result;
 use tracing::info;

@@ -1,6 +1,6 @@
-use crate::error::{Result, RmmError};
 use tray_item::{IconSource, TrayItem};
 use tracing::info;
+use std::process;
 
 pub fn create_tray() -> () {
     // Load PNG data directly (macOS NSImage can handle PNG format)
@@ -14,16 +14,27 @@ pub fn create_tray() -> () {
     };
 
     // Create tray icon using PNG data
-    let mut tray = TrayItem::new("Tray Example", icon).unwrap();
+    let mut tray = TrayItem::new("RMM - Rust Mouse Monitor", icon).unwrap();
 
-    tray.add_label("Tray Label").unwrap();
-
-    tray.add_menu_item("Hello", || {
-        println!("Hello!");
+    // Add About menu item
+    tray.add_menu_item("About", || {
+        println!("=================================");
+        println!("RMM - Rust Mouse Monitor");
+        println!("Author: Red");
+        println!("Created with LLM help for learning Rust concepts");
+        println!("=================================");
     }).unwrap();
 
-    let mut inner = tray.inner_mut();
+    tray.add_label("---").unwrap();
+
+    // Add Stop menu item
+    tray.add_menu_item("Stop", || {
+        info!("Stopping RMM application...");
+        println!("RMM stopped by user");
+        process::exit(0);
+    }).unwrap();
+
+    let inner = tray.inner_mut();
     inner.add_quit_item("Quit");
     inner.display();
-
 }
