@@ -9,6 +9,12 @@ pub struct AppState {
     pub error_count: u32,
 }
 
+impl Default for AppState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AppState {
     pub fn new() -> Self {
         let now = Instant::now();
