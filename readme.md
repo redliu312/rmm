@@ -4,6 +4,10 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
 
+
+Mainly focus on the macos app, but the app could not move the mouse..., (even the permission is esclated)
+Cargo run could......
+
 A learning project for Rust, created with LLM assistance.
 
 RMM is an automatic mouse mover that prevents your computer from going to sleep by simulating mouse activity when you're inactive. It runs as a system tray application on macOS, Windows, and Linux.
