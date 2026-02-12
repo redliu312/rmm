@@ -4,17 +4,21 @@ use tracing::info;
 use tray_item::{IconSource, TrayItem};
 
 pub fn create_tray() -> () {
-    // Load PNG data directly (macOS NSImage can handle PNG format)
-    let png_data = include_bytes!("../resources/mouse.png").to_vec();
-
-    // Create icon source with PNG data
-    let icon = IconSource::Data {
-        data: png_data,
-        height: 16,
-        width: 16,
+    // Platform-specific icon creation
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let icon = {
+        let png_data = include_bytes!("../resources/mouse.png").to_vec();
+        IconSource::Data {
+            data: png_data,
+            height: 16,
+            width: 16,
+        }
     };
 
-    // Create tray icon using PNG data
+    #[cfg(target_os = "windows")]
+    let icon = IconSource::Resource("mouse-icon");
+
+    // Create tray icon
     let mut tray = TrayItem::new("RMM - Rust Mouse Monitor", icon).unwrap();
 
     // Add About menu item with native dialog
@@ -36,7 +40,21 @@ pub fn create_tray() -> () {
     })
     .unwrap();
 
-    let inner = tray.inner_mut();
-    inner.add_quit_item("Quit");
-    inner.display();
+    // Platform-specific quit handling
+    #[cfg(target_os = "macos")]
+    {
+        let inner = tray.inner_mut();
+        inner.add_quit_item("Quit");
+        inner.display();
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        // On Linux (ksni) and Windows, add Quit as a regular menu item
+        tray.add_menu_item("Quit", || {
+            info!("Quitting RMM application...");
+            process::exit(0);
+        })
+        .unwrap();
+    }
 }

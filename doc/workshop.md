@@ -1,14 +1,14 @@
-# Workshop: Rust Mouse Mover 初始化步驟
+# Workshop: Rust Mouse Mover Initialization Steps
 
-## Phase 1: 專案初始化
+## Phase 1: Project Initialization
 
-### 1. 初始化 Cargo 專案
+### 1. Initialize Cargo Project
 
 ```bash
 cargo init --name rmm
 ```
 
-### 2. 設定 Cargo.toml
+### 2. Configure Cargo.toml
 
 ```toml
 [package]
@@ -50,7 +50,7 @@ codegen-units = 1
 strip = true
 ```
 
-### 3. 建立專案結構
+### 3. Create Project Structure
 
 ```bash
 mkdir -p src/platform tests resources/icons
@@ -59,7 +59,7 @@ touch src/platform/{mod,macos,windows,linux}.rs
 touch tests/{integration,mouse_test}.rs
 ```
 
-### 4. 建立 src/error.rs
+### 4. Create src/error.rs
 
 ```rust
 use thiserror::Error;
@@ -85,7 +85,7 @@ pub enum RmmError {
 pub type Result<T> = std::result::Result<T, RmmError>;
 ```
 
-### 5. 更新 src/main.rs
+### 5. Update src/main.rs
 
 ```rust
 mod error;
@@ -110,7 +110,7 @@ fn main() -> Result<()> {
 }
 ```
 
-### 6. 驗證
+### 6. Verify
 
 ```bash
 cargo build
@@ -119,7 +119,7 @@ cargo test
 cargo clippy
 ```
 
-### 7. 更新 .gitignore
+### 7. Update .gitignore
 
 ```gitignore
 /target/
@@ -132,9 +132,9 @@ Cargo.lock
 
 ---
 
-## Phase 2: 狀態管理
+## Phase 2: State Management
 
-### 1. 實作 src/state.rs
+### 1. Implement src/state.rs
 
 ```rust
 use std::sync::{Arc, Mutex};
@@ -164,7 +164,7 @@ impl AppState {
 pub type SharedState = Arc<Mutex<AppState>>;
 ```
 
-### 2. 實作 src/config.rs
+### 2. Implement src/config.rs
 
 ```rust
 use crate::error::Result;
@@ -225,7 +225,7 @@ impl Config {
 }
 ```
 
-### 3. 更新 src/main.rs
+### 3. Update src/main.rs
 
 ```rust
 mod error;
@@ -256,7 +256,7 @@ fn main() -> Result<()> {
 }
 ```
 
-### 4. 驗證
+### 4. Verify
 
 ```bash
 cargo build
@@ -265,9 +265,9 @@ cargo run
 
 ---
 
-## Phase 3: 活動監控
+## Phase 3: Activity Monitoring
 
-### 1. 實作 src/activity.rs
+### 1. Implement src/activity.rs
 
 ```rust
 use crate::state::SharedState;
@@ -299,7 +299,7 @@ pub fn start_monitoring(state: SharedState) {
 }
 ```
 
-### 2. 更新 src/main.rs
+### 2. Update src/main.rs
 
 ```rust
 mod error;
@@ -340,20 +340,20 @@ fn main() -> Result<()> {
 }
 ```
 
-### 3. 驗證
+### 3. Verify
 
 ```bash
 cargo build
 cargo run
 ```
 
-執行後，移動滑鼠或按鍵盤，應該會看到活動被監控（state.last_activity 會更新）。
+After running, move the mouse or press keyboard keys. You should see activity being monitored (state.last_activity will update).
 
 ---
 
-## Phase 4: 滑鼠移動控制器
+## Phase 4: Mouse Movement Controller
 
-### 1. 實作 src/mouse.rs
+### 1. Implement src/mouse.rs
 
 ```rust
 use crate::error::{Result, RmmError};
@@ -456,7 +456,7 @@ pub fn check_and_move(state: SharedState, inactivity_threshold: u64) -> Result<(
 }
 ```
 
-### 2. 更新 src/main.rs
+### 2. Update src/main.rs
 
 ```rust
 mod error;
@@ -517,83 +517,127 @@ fn main() -> Result<()> {
 }
 ```
 
-### 3. 驗證
+### 3. Verify
 
 ```bash
 cargo build
 cargo run
 ```
 
-執行後：
-1. 程式會每 60 秒檢查一次
-2. 如果 60 秒內沒有活動，會自動移動滑鼠 ±10 像素
-3. 移動方向會交替（+10, -10, +10, -10...）
-4. 移動後會驗證位置是否正確
-5. 如果失敗 10 次會顯示錯誤訊息
+After running:
+1. The program checks every 60 seconds
+2. If there's no activity within 60 seconds, it will automatically move the mouse by ±10 pixels
+3. Movement direction alternates (+10, -10, +10, -10...)
+4. After moving, it verifies the position is correct
+5. If it fails 10 times, it displays an error message
 
 ---
 
 ## Phase 5: System Tray Integration
 
+### Platform-Specific Considerations
+
+The tray-item crate has different APIs on different platforms. Here's what you need to know:
+
+#### Platform API Differences
+
+| Feature | macOS | Linux (ksni) | Windows |
+|---------|-------|--------------|---------|
+| IconSource::Data | Yes | Yes | No |
+| IconSource::Resource | Yes | Yes | Yes |
+| add_quit_item() | Yes | No | No |
+| display() | Yes | No (auto-spawns) | No (auto-runs) |
+
+#### Icon Source Selection
+
+- **macOS and Linux**: Use `IconSource::Data` with PNG bytes
+- **Windows**: Use `IconSource::Resource` with resource name
+
+#### Quit Menu Handling
+
+- **macOS**: Use special `add_quit_item()` method and call `display()`
+- **Linux and Windows**: Use regular `add_menu_item()` for quit functionality
+
 ### 1. Create src/tray.rs
 
-Add a system tray icon with menu controls.
+Add a system tray icon with menu controls that works across all platforms.
 
 ```rust
-use crate::error::{Result, RmmError};
-use crate::state::SharedState;
-use tray_item::{IconSource, TrayItem};
-use std::sync::mpsc;
+use native_dialog::{MessageDialog, MessageType};
+use std::process;
 use tracing::info;
+use tray_item::{IconSource, TrayItem};
 
-pub enum TrayMessage {
-    Toggle,
-    Quit,
-}
-
-pub fn create_tray(state: SharedState) -> Result<(TrayItem, mpsc::Receiver<TrayMessage>)> {
-    let mut tray = TrayItem::new("RMM", IconSource::Resource("icon-name"))
-        .map_err(|e| RmmError::SystemTray(format!("Failed to create tray: {:?}", e)))?;
-    
-    let (tx, rx) = mpsc::channel();
-    
-    // Start/Stop menu item
-    let tx_toggle = tx.clone();
-    tray.add_menu_item("Start/Stop", move || {
-        let _ = tx_toggle.send(TrayMessage::Toggle);
-    })
-    .map_err(|e| RmmError::SystemTray(format!("Failed to add menu item: {:?}", e)))?;
-    
-    // Quit menu item
-    let tx_quit = tx.clone();
-    tray.add_menu_item("Quit", move || {
-        let _ = tx_quit.send(TrayMessage::Quit);
-    })
-    .map_err(|e| RmmError::SystemTray(format!("Failed to add menu item: {:?}", e)))?;
-    
-    info!("System tray created");
-    Ok((tray, rx))
-}
-
-pub fn handle_tray_events(rx: mpsc::Receiver<TrayMessage>, state: SharedState) {
-    std::thread::spawn(move || {
-        while let Ok(msg) = rx.recv() {
-            match msg {
-                TrayMessage::Toggle => {
-                    if let Ok(mut state_guard) = state.lock() {
-                        state_guard.is_running = !state_guard.is_running;
-                        let status = if state_guard.is_running { "started" } else { "stopped" };
-                        info!("Mouse movement {}", status);
-                    }
-                }
-                TrayMessage::Quit => {
-                    info!("Quit requested");
-                    std::process::exit(0);
-                }
-            }
+pub fn create_tray() -> () {
+    // Platform-specific icon creation
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    let icon = {
+        let png_data = include_bytes!("../resources/mouse.png").to_vec();
+        IconSource::Data {
+            data: png_data,
+            height: 16,
+            width: 16,
         }
-    });
+    };
+
+    #[cfg(target_os = "windows")]
+    let icon = IconSource::Resource("mouse-icon");
+
+    // Create tray icon
+    let mut tray = TrayItem::new("RMM - Rust Mouse Monitor", icon).unwrap();
+
+    // Add About menu item with native dialog
+    tray.add_menu_item("About", || {
+        let _ = MessageDialog::new()
+            .set_type(MessageType::Info)
+            .set_title("About RMM")
+            .set_text("RMM - Rust Mouse Monitor\n\nAuthor: Red\n\nCreated with LLM help for learning Rust concepts")
+            .show_alert();
+    }).unwrap();
+
+    tray.add_label("---").unwrap();
+
+    // Add Stop menu item
+    tray.add_menu_item("Stop", || {
+        info!("Stopping RMM application...");
+        println!("RMM stopped by user");
+        process::exit(0);
+    })
+    .unwrap();
+
+    // Platform-specific quit handling
+    #[cfg(target_os = "macos")]
+    {
+        let inner = tray.inner_mut();
+        inner.add_quit_item("Quit");
+        inner.display();
+    }
+
+    #[cfg(any(target_os = "linux", target_os = "windows"))]
+    {
+        // On Linux (ksni) and Windows, add Quit as a regular menu item
+        tray.add_menu_item("Quit", || {
+            info!("Quitting RMM application...");
+            process::exit(0);
+        })
+        .unwrap();
+    }
 }
+```
+
+### Platform-Specific Dependencies
+
+Update Cargo.toml to include platform-specific tray-item features:
+
+```toml
+[target.'cfg(target_os = "macos")'.dependencies]
+tray-item = "0.10"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tray-item = "0.10"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tray-item = { version = "0.10", features = ["ksni"] }
 ```
 
 ### 2. Update src/main.rs
@@ -683,55 +727,55 @@ After running:
 
 ---
 
-## 完成檢查
+## Completion Checklist
 
 ### Phase 1
-- [ ] `cargo build` 成功
-- [ ] `cargo run` 執行無誤
-- [ ] 所有模組檔案已建立
-- [ ] 目錄結構正確
+- [ ] `cargo build` succeeds
+- [ ] `cargo run` executes without errors
+- [ ] All module files created
+- [ ] Directory structure correct
 
 ### Phase 2
-- [ ] state.rs 實作完成
-- [ ] config.rs 實作完成
-- [ ] main.rs 更新完成
-- [ ] 程式可以編譯執行
+- [ ] state.rs implementation complete
+- [ ] config.rs implementation complete
+- [ ] main.rs updated
+- [ ] Program compiles and runs
 
 ### Phase 3
-- [ ] activity.rs 實作完成
-- [ ] main.rs 整合活動監控
-- [ ] 程式可以監控鍵盤滑鼠活動
-- [ ] 背景執行緒正常運作
+- [ ] activity.rs implementation complete
+- [ ] main.rs integrates activity monitoring
+- [ ] Program can monitor keyboard and mouse activity
+- [ ] Background thread runs normally
 
 ### Phase 4
-- [ ] mouse.rs 實作完成
-- [ ] MouseController 結構體建立
-- [ ] check_and_move 函數實作
-- [ ] main.rs 整合 heartbeat 迴圈
-- [ ] 程式可以自動移動滑鼠
-- [ ] 移動驗證功能正常
-- [ ] 錯誤計數功能正常
+- [ ] mouse.rs implementation complete
+- [ ] MouseController struct created
+- [ ] check_and_move function implemented
+- [ ] main.rs integrates heartbeat loop
+- [ ] Program can automatically move mouse
+- [ ] Movement verification works
+- [ ] Error counting works
 
 ### Phase 5
-- [ ] tray.rs 實作完成
-- [ ] TrayMessage enum 建立
-- [ ] create_tray 函數實作
-- [ ] handle_tray_events 函數實作
-- [ ] main.rs 整合 system tray
-- [ ] 系統托盤圖示顯示
-- [ ] Start/Stop 功能正常
-- [ ] Quit 功能正常
+- [ ] tray.rs implementation complete
+- [ ] TrayMessage enum created
+- [ ] create_tray function implemented
+- [ ] handle_tray_events function implemented
+- [ ] main.rs integrates system tray
+- [ ] System tray icon displays
+- [ ] Start/Stop functionality works
+- [ ] Quit functionality works
 
 ---
 
-## 常用指令
+## Common Commands
 
 ```bash
-cargo check          # 快速檢查
-cargo build          # 建置 debug
-cargo build --release # 建置 release
-cargo run            # 執行
-cargo test           # 測試
+cargo check          # Quick check
+cargo build          # Build debug
+cargo build --release # Build release
+cargo run            # Run
+cargo test           # Test
 cargo clippy         # Lint
-cargo fmt            # 格式化
+cargo fmt            # Format
 ```
