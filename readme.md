@@ -5,8 +5,12 @@
 [![Rust](https://img.shields.io/badge/rust-stable-orange.svg)](https://www.rust-lang.org)
 
 
-Mainly focus on the macos app, but the app could not move the mouse..., (even the permission is esclated)
-Cargo run could......
+Mainly focus on the macos app, 
+if the mouse auto move fail (log file located at /Users/simon_liu/Library/Application Support/com.rmm.rmm)
+grant the accessibility permission for this app in macos system setting
+
+
+
 
 A learning project for Rust, created with LLM assistance.
 
