@@ -6,7 +6,7 @@
 
 
 Mainly focus on the macos app, 
-if the mouse auto move fail (log file located at /Users/simon_liu/Library/Application Support/com.rmm.rmm)
+if the mouse auto move fail (log file located at ~/Library/Application Support/com.rmm.rmm)
 grant the accessibility permission for this app in macos system setting
 
 
