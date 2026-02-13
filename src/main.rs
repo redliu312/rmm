@@ -6,22 +6,51 @@ mod state;
 mod tray;
 
 use error::Result;
+use std::fs::{self, OpenOptions};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tracing::info;
+use tracing_subscriber::fmt::writer::MakeWriterExt;
 
 fn main() -> Result<()> {
-    // Initialize logging (use RUST_LOG env or default to INFO)
+    // Create log directory and file
+    let log_dir = directories::ProjectDirs::from("com", "rmm", "rmm")
+        .map(|dirs| dirs.data_local_dir().to_path_buf())
+        .unwrap_or_else(|| {
+            let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+            std::path::PathBuf::from(home).join("Library/Logs")
+        });
+
+    fs::create_dir_all(&log_dir)?;
+    let log_path = log_dir.join("rmm.log");
+
+    // Open log file in append mode
+    let log_file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .expect("Failed to open log file");
+
+    // Clone for the startup message
+    let log_path_display = log_path.clone();
+
+    // Initialize logging to both stdout and file
+    let file_writer = log_file.with_max_level(tracing::Level::INFO);
+    let stdout_writer = std::io::stdout.with_max_level(tracing::Level::INFO);
+
     tracing_subscriber::fmt()
+        .with_writer(file_writer.and(stdout_writer))
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
                 .add_directive(tracing::Level::INFO.into()),
         )
+        .with_ansi(false) // Disable ANSI colors in log file
         .init();
 
-    // Log startup
+    // Log startup with file location
     info!("Starting RMM 2");
+    info!("Log file: {}", log_path_display.display());
 
     // Load configuration (returns error on failure)
     let config = config::Config::load()?;

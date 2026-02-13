@@ -28,5 +28,13 @@
     <true/>
     <key>NSHumanReadableCopyright</key>
     <string>Copyright © 2026 redliu312. All rights reserved.</string>
+    
+    <!-- Privacy - Accessibility Usage Description -->
+    <key>NSAppleEventsUsageDescription</key>
+    <string>RMM needs permission to control your mouse to prevent your computer from going to sleep during inactivity.</string>
+    
+    <!-- Additional privacy descriptions for Accessibility -->
+    <key>NSSystemAdministrationUsageDescription</key>
+    <string>RMM needs permission to monitor keyboard and mouse activity to detect when you're away from your computer.</string>
 </dict>
 </plist>
